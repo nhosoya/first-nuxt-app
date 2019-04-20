@@ -4,22 +4,13 @@
 #
 version: 2
 jobs:
-  build:
+  build_and_test:
+    working_directory: ~/workspace
     docker:
-      # specify the version you desire here
       - image: circleci/node:11.14.0-stretch
-
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      # - image: circleci/mongo:3.4.4
-
-    working_directory: ~/repo
-
     steps:
       - checkout
 
-      # Download and cache dependencies
       - restore_cache:
           keys:
             - v1-dependencies-{{ checksum "package.json" }}
@@ -33,5 +24,35 @@ jobs:
             - node_modules
           key: v1-dependencies-{{ checksum "package.json" }}
 
-      # run tests!
       - run: yarn test
+
+      - persist_to_workspace:
+          root: ./
+          paths:
+            - .
+
+  deploy:
+    docker:
+      - image: circleci/node:11.14.0-stretch
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: setup
+          command: yarn build && yarn generate
+      - run:
+          name: Deploy Master to Firebase
+          command: ./node_modules/.bin/firebase deploy --token=$FIREBASE_DEPLOY_TOKEN
+
+workflows:
+  version: 2
+
+  -deploy:
+    jobs:
+      - build_and_test
+      - deploy:
+          requires:
+            - build_and_test
+          filters:
+            branches:
+              only: master
